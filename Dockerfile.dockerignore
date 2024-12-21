@@ -1,0 +1,2 @@
+# Ignore uv venv
+./.venv

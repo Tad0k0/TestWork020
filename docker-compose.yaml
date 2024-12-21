@@ -1,0 +1,80 @@
+services:
+  app:
+    build: .
+    depends_on:
+      - cache
+      - db
+    restart: always
+    command: uv run main.py
+    ports:
+      - "8000:8000"
+    develop:
+      # Create a `watch` configuration to update the appl
+      # https://docs.docker.com/compose/file-watch/#compose-watch-versus-bind-mounts
+      watch:
+        # Sync the working directory with the `/app` directory in the container
+        - action: sync
+          path: .
+          target: /app
+          # Exclude the project virtual environment — it could be for a
+          # different platform in the container
+          ignore:
+            - .venv/
+
+        # Rebuild the image on changes to the `pyproject.toml`
+        - action: rebuild
+          path: ./pyproject.toml
+    volumes:
+      - app-data:/app
+  db:
+    env_file: .env
+    image: postgres:15
+    restart: always
+    volumes:
+      - app-db-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${DB_USER?Variable not set}
+      - POSTGRES_PASSWORD=${DB_PASSWORD?Variable not set}
+      - PGDATA=/var/lib/postgresql/data
+      - POSTGRES_DB=${DB_NAME?Variable not set}
+    expose:
+      - 5432
+    ports:
+      - "5432:5432"
+  cache:
+    image: "redis:6.2-alpine"
+    restart: unless-stopped
+    command: --port ${REDIS_PORT?Variable not set}
+    expose:
+      - ${REDIS_PORT?Variable not set}
+    ports:
+      - "3679:3679"
+    volumes:
+      - app-db-data:/data
+  celery:
+    build: .
+    develop:
+      # Create a `watch` configuration to update the appl
+      # https://docs.docker.com/compose/file-watch/#compose-watch-versus-bind-mounts
+      watch:
+        # Sync the working directory with the `/app` directory in the container
+        - action: sync
+          path: .
+          target: /app
+          # Exclude the project virtual environment — it could be for a
+          # different platform in the container
+          ignore:
+            - .venv/
+
+        # Rebuild the image on changes to the `pyproject.toml`
+        - action: rebuild
+          path: ./pyproject.toml
+    command: uv run celery -A transaction.worker.c_worker worker
+    volumes:
+      - app-data:/app
+    depends_on:
+      - cache
+
+volumes:
+  app-db-data:
+  app-data:
